@@ -55,24 +55,3 @@ def convert_to_datetime(Date:str):
     sec = int(nums[4])
 
     return datetime.datetime(year,month,day,hour=hour,minute=min,second=sec)
-
-def retry(retries: int = 0) -> None:
-    """Recalls the get function passed into it.
-    
-    """
-    def retry_decorator(func):
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            backoff = 1
-            for retry in range(retries):
-                try:
-                    await func(*args, **kwargs)
-                except aiohttp.ClientConnectionError as e: 
-                    print(e)          
-                    asyncio.sleep(backoff)
-                    backoff += backoff ** 2
-                    continue
-                #except aiohttp.ClientResponseError as e:
-                    #print(e)
-        return wrapper
-    return retry_decorator
