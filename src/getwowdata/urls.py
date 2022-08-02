@@ -1,4 +1,4 @@
-"""Contians all urls used in get-wow-data"""
+"""Contians all urls used in get-wow-data-async"""
 urls = {
         "access_token": "https://{region}.battle.net/oauth/token",
         "connected_realm_index": "https://{region}.api.blizzard.com/data/wow/connected-realm/index",

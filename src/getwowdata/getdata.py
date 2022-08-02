@@ -33,36 +33,49 @@ class WowApi():
                 async with self.session.post(urls['access_token'].format(region=self.region), auth=aiohttp.BasicAuth(id, secret), data=token_data) as response:
                     response = await response.json()
                     self.access_token = response['access_token']
+                    break
             except aiohttp.ClientConnectionError as e: 
                 print(f'access token {e}')          
             except aiohttp.ClientResponseError as e:
                 print(f'access token {e.status}')
 
 
-    async def _fetch_get(self, url_name: str, ids: dict = None, retries: int = 5):
+    async def _fetch_get(self, url_name: str, ids: dict = {}, retries: int = 5):
+
         params = {
             **{
                 "access_token": self.access_token,
                 "namespace": f"dynamic-{self.region}",
-            },
-
+            }
         }
+        if url_name in ['repice_icon', 'profession_icon', 'item_icon']:
+            params = {
+                **{
+                    "access_token": self.access_token,
+                    "namespace": f"static-{self.region}",
+            }
+            }
+
         for retry in range(retries):
             try:
                 async with self.session.get(urls[url_name].format(region=self.region, **ids), params=params) as response:
-                    if url_name == 'repice_icon' or 'profession_icon' or 'item_icon':
-                        return await response.read()
+                    if url_name in ['item_icon', 'profession_icon', 'recipe_icon']:
+                        resp = await response.read()
+                        return resp
                     else:
                         json = await response.json()
                         json['Date'] = response.headers['Date']
                         return json
+
             except aiohttp.ClientConnectionError as e: 
-                print(f'get {e}')          
+                print(f'get {e}') 
+
             except aiohttp.ClientResponseError as e:
                 print(f'get {e.status}')
 
 
     async def _fetch_search(self, url_name: str, extra_params: dict, retries: int = 5):
+
         params = {
                 "access_token": self.access_token,
                 "namespace": f"static-{self.region}",
@@ -191,7 +204,10 @@ async def main():
     for i in range(10):
         us = await WowApi.create('us')
         start = time.time()
-        await us.item_search(**{'id':'(0,)'})
+        #resp = await us._fetch_get('item_icon', ids = {'item_id':161887})
+        json = await us._fetch_get('connected_realm_index')
+        print(type(json))
+        #print(type(resp))
         end = time.time()
         print(end - start)
         await us.close()
