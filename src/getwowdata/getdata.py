@@ -11,16 +11,31 @@ from getwowdata.helpers import *
 class WowApi():
     
     @classmethod
-    async def create(cls, region):
+    async def create(cls, region: str):
+        """Gets an instance of WowApi with an access token, region, and aiohttp session.
+
+        Args:
+            region (str): Each region has its own data. This specifies which regions data
+                WoWApi will consume.
+        Returns:
+            An instance of the WowApi class.
+        """
         self = WowApi() 
         self.region = region 
         timeout = aiohttp.ClientTimeout(connect=1, sock_read=60, sock_connect=1)
         self.session = aiohttp.ClientSession(raise_for_status=True, timeout=timeout)   
-        await self.get_access_token()   
+        await self._get_access_token()   
         return self 
 
 
-    async def get_access_token(self, wow_api_id: str = None, wow_api_secret: str = None, retries: int = 5) -> None:
+    async def _get_access_token(self, wow_api_id: str = None, wow_api_secret: str = None, retries: int = 5) -> None:
+        """Retrieves battle.net client id and secret from env and makes it an attribute.
+
+        Args:
+            wow_api_id (str): The id from a battle.net api client.
+            wow_api_secret (str): The secret from a battle.net api client.
+            retries (int): The number of times the request will be retried on failure.
+        """
         load_dotenv()
         id = os.environ["wow_api_id"]
         secret = os.environ["wow_api_secret"]
@@ -40,8 +55,19 @@ class WowApi():
                 print(f'access token {e.status}')
 
 
-    async def _fetch_get(self, url_name: str, ids: dict = {}, retries: int = 5):
+    async def _fetch_get(self, url_name: str, ids: dict = {}, retries: int = 5) -> dict:
+        """Preforms a aiohttp get request for the given url_name from urls.py. Accepts ids for get methods.
 
+        Args:
+            url_name (str): The name of a url from urls.py
+            ids (dict): The ids that need to be send with the revelant url_name.
+                Such as some item_id.
+            retries (int): The number of times the request will be retried on failure.
+
+        Returns:
+            The content from an endpoint as binary or a dict depending if the request 
+            was made for an icon or json data, respectively. 
+        """
         params = {
             **{
                 "access_token": self.access_token,
@@ -53,7 +79,7 @@ class WowApi():
                 **{
                     "access_token": self.access_token,
                     "namespace": f"static-{self.region}",
-            }
+                }
             }
 
         for retry in range(retries):
@@ -74,8 +100,18 @@ class WowApi():
                 print(f'get {e.status}')
 
 
-    async def _fetch_search(self, url_name: str, extra_params: dict, retries: int = 5):
+    async def _fetch_search(self, url_name: str, extra_params: dict, retries: int = 5) -> dict:
+        """Preforms a aiohttp get request for the given url_name from urls.py. Accepts extra_params for search methods.
+        
+        Args:
+            url_name (str): The name of a url from urls.py
+            extra_params (dict): Parameters for refining a search request.
+                See https://develop.battle.net/documentation/world-of-warcraft/guides/search
+            retries (int): The number of times the request will be retried on failure.
 
+        Returns:
+            The search results json parsed into a dict.
+        """
         params = {
                 "access_token": self.access_token,
                 "namespace": f"static-{self.region}",
@@ -109,6 +145,19 @@ class WowApi():
 
 
     async def _get_item(self, url: str, params: dict) -> dict:
+        """Preforms a get request for an item inside an item search.
+
+        This is a general session.get() but it is currently used in item_search()
+        to get detailed item data from the href's in the search results.
+        
+        Args:
+            url (str): The url to query.
+            params (dict): The parameters needed for a successful query.
+                Such as access token and namespace.
+
+        Returns:
+            The json response from the url as a dict.
+        """
         for retry in range(5):
             try:
                 async with self.session.get(url, params=params) as item_data:
@@ -121,83 +170,161 @@ class WowApi():
 
 
     async def connected_realm_search(self, **extra_params: dict) -> dict:
+        """Preforms a search of all realms in that region.
+
+        Args:
+            extra_params (dict): Parameters for refining a search request.
+                See https://develop.battle.net/documentation/world-of-warcraft/guides/search
+            retries (int): The number of times the request will be retried on failure.
+
+        Returns:
+            The search results as json parsed into a dict.
+        """
         url_name = 'search_realm'
         return await self._fetch_search(url_name, extra_params=extra_params)
 
 
     async def item_search(self, **extra_params: dict) -> dict:
+        """Preforms a search of all items.
+
+        Args:
+            extra_params (dict): Parameters for refining a search request.
+                See https://develop.battle.net/documentation/world-of-warcraft/guides/search
+            retries (int): The number of times the request will be retried on failure.
+
+        Returns:
+            The search results as json parsed into a dict.
+        """
         url_name = 'search_item'
         return await self._fetch_search(url_name, extra_params=extra_params)
 
-    async def get_connected_realms_by_id(
-        self, connected_realm_id: int
-    ) -> dict:
+    async def get_connected_realms_by_id(self, connected_realm_id: int) -> dict:
+        """Returns the all realms in a connected realm by their connected realm id.
+
+        Args:
+            connected_realm_id (int):
+                The id of a connected realm cluster.            
+        """
         url_name = 'realm'
         ids = {'connected_realm_id':connected_realm_id}
         return await self._fetch_get(url_name, ids)
 
     async def get_auctions(self, connected_realm_id) -> dict:
+        """Returns the all auctions in a connected realm by their connected realm id.
+
+        Args:
+            connected_realm_id (int):
+                The id of a connected realm cluster.            
+        """
         url_name = 'auction'
         ids = {'connected_realm_id':connected_realm_id}
         return await self._fetch_get(url_name, ids)
 
     async def get_profession_index(self) -> dict:
+        """Returns the all professions."""
         url_name = 'profession_index'
         return await self._fetch_get(url_name)
 
-    async def get_profession_tiers(self, profession_id) -> dict:
+    async def get_profession_tiers(self, profession_id: int) -> dict:
+        """Returns the all profession skill tiers in a profession by their profession id.
+
+        A profession teir includes all the recipes from that expansion.
+        Teir examples are classic, tbc, shadowlands, ...
+
+        Args:
+            profession_id (int):
+                The id of a profession. Get from get_profession_index().           
+        """
         url_name = 'profession_skill_tier'
         ids = {'profession_id':profession_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_profession_icon(self, profession_id) -> bytes:
+    async def get_profession_icon(self, profession_id: int) -> bytes:
+        """Returns a professions icon.
+        
+        Args:
+            profession_id (int): The id of a profession. Get from get_profession_index.
+        """
         url_name = 'profession_icon'
         ids = {'profession_id':profession_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_profession_tier_categories(
-        self, profession_id, skill_tier_id
-    ) -> dict:
+    async def get_profession_tier_categories(self, profession_id: int, skill_tier_id: int) -> dict:
+        """Returns all crafts from a skill teir.
+
+        Included in this response are the categories like belts, capes, ... and the item within them.
+        This is broken down by skill tier (tbc, draenor, shadowlands).
+
+        Args:
+            profession_id (int): The profession's id. Found in get_profession_index().
+            skill_tier_id (int): The skill teir id. Found in get_profession_teirs().
+        """
         url_name = 'profession_tier_detail'
         ids = {'profession_id':profession_id, 'skill_tier_id':skill_tier_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_recipe(self, recipe_id) -> dict:
+    async def get_recipe(self, recipe_id: int) -> dict:
+        """Returns a recipe by its id.
+        
+        Args: 
+            recipe_id (int): The id from a recipe. Found in get_profession_tier_details().
+        """
         url_name = 'recipe_detail'
         ids = {'recipe_id':recipe_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_recipe_icon(self, recipe_id) -> bytes:
+    async def get_recipe_icon(self, recipe_id: int) -> bytes:
+        """Returns a recipes icon by its id.
+        
+        Args:
+            recipe_id (int): The id from a recipe. Found in get_profession_tier_details().
+        """
         url_name = 'repice_icon'
         ids = {'recipe_id':recipe_id}
         return await self._fetch_get(url_name, ids)
 
     async def get_item_classes(self) -> dict:
+        """Returns all item classes (consumable, container, weapon, ...)."""
         url_name = 'item_classes'
         return await self._fetch_get(url_name)
 
-    async def get_item_subclasses(self, item_class_id) -> dict:
+    async def get_item_subclasses(self, item_class_id: int) -> dict:
+        """Returns all item subclasses (class: consumable, subclass: potion, elixir, ...).
+
+        Args:
+            item_class_id (int): Item class id. Found with get_item_classes().
+        """
         url_name = 'item_subclass'
         ids = {'item_class_id':item_class_id}
         return await self._fetch_get(url_name, ids)
 
     async def get_item_set_index(self) -> dict:
+        """Returns all item sets. Ex: teir sets"""
         url_name = 'item_set_index'
         return await self._fetch_get(url_name)
 
-    async def get_item_icon(self, item_id) -> bytes:
+    async def get_item_icon(self, item_id: int) -> bytes:
+        """Returns an item's icon by its id.
+        
+        Args:
+            item_id (int): The items id. Get from item_search().
+        """
         url_name = 'item_icon'
         ids = {'item_id':item_id}
         return await self._fetch_get(url_name, ids)
 
     async def get_wow_token(self) -> dict:
+        """Returns data on the regions wow token such as price."""
         url_name = 'wow_token'
         return await self._fetch_get(url_name)
 
+    #TODO
     async def get_connected_realm_index(self) -> dict:
+        """Returns a dict of all realm's names with their connected realm id."""
         pass
 
     async def close(self):
+        """Closes aiohttp.ClientSession."""
         await self.session.close()
 
 async def main():
