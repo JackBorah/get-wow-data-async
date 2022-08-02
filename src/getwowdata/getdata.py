@@ -88,7 +88,7 @@ class WowApi():
 
         for retry in range(retries):
             try:
-                async with self.session.get(urls[url_name], params=search_params) as response:
+                async with self.session.get(urls[url_name].format(region=self.region), params=search_params) as response:
                     json = await response.json()
                     if url_name == 'search_item':
                         tasks = []
@@ -201,13 +201,12 @@ class WowApi():
         await self.session.close()
 
 async def main():
+    from pprint import pprint
     for i in range(10):
         us = await WowApi.create('us')
         start = time.time()
-        #resp = await us._fetch_get('item_icon', ids = {'item_id':161887})
-        json = await us._fetch_get('connected_realm_index')
-        print(type(json))
-        #print(type(resp))
+        json = await us._fetch_search('search_item', {'id':'(0,30)'})
+        pprint(json)
         end = time.time()
         print(end - start)
         await us.close()
