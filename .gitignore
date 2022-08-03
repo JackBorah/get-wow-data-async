@@ -106,12 +106,13 @@ celerybeat.pid
 .venv
 env/
 venv/
+venv-dev/
 ENV/
 env.bak/
 venv.bak/
 Scripts/
 pyvenv.cfg
-get-wow-data-venv/
+get-wow-data-async/venv/
 .vscode
 
 # Spyder project settings
