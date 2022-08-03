@@ -5,18 +5,18 @@ import time
 import aiohttp
 from dotenv import load_dotenv
 
-from getwowdata.urls import urls
-from getwowdata.helpers import *
-
+from getwowdataasync.urls import urls
+from getwowdataasync.helpers import *
 
 class WowApi:
+    """Instantiate with WowApi.create('region') to use its methods to query the API."""
     @classmethod
     async def create(cls, region: str):
         """Gets an instance of WowApi with an access token, region, and aiohttp session.
 
         Args:
             region (str): Each region has its own data. This specifies which regions data
-                WoWApi will consume.
+            WoWApi will consume.
         Returns:
             An instance of the WowApi class.
         """

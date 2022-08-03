@@ -3,8 +3,8 @@ import re
 
 import pytest
 from aioresponses import aioresponses
-import getwowdata
-from getwowdata.getdata import WowApi
+import getwowdataasync
+from getwowdataasync.getdata import WowApi
 from dotenv import load_dotenv
 
 
@@ -20,13 +20,13 @@ async def mock_api_instance(mock_aioresponses):
     #os.environ["wow_api_id"] = "dummyid"
     #os.environ["wow_api_secret"] = "dummysecret"
     mock_aioresponses.post(
-        getwowdata.urls["access_token"].format(region="us"), status=200, payload=data
+        getwowdataasync.urls["access_token"].format(region="us"), status=200, payload=data
     )
-    return await getwowdata.WowApi.create("us")
+    return await getwowdataasync.WowApi.create("us")
 
 @pytest.fixture
 async def real_api_instance():
-    return await getwowdata.WowApi.create("us")
+    return await getwowdataasync.WowApi.create("us")
 
 async def test_get_access_token(mock_api_instance):
     api = mock_api_instance
@@ -37,7 +37,7 @@ async def test_get_access_token(mock_api_instance):
 async def test_fetch_get_returns_json(mock_aioresponses, mock_api_instance):
     api = mock_api_instance
     pattern = re.compile(
-        getwowdata.urls["connected_realm_index"].format(region=api.region)
+        getwowdataasync.urls["connected_realm_index"].format(region=api.region)
     )
     data = {"key": 1}
     mock_aioresponses.get(
@@ -53,7 +53,7 @@ async def test_fetch_get_returns_json(mock_aioresponses, mock_api_instance):
 
 async def test_fetch_search_realms(mock_aioresponses, mock_api_instance):
     api = mock_api_instance
-    pattern = re.compile(getwowdata.urls["search_realm"].format(region=api.region))
+    pattern = re.compile(getwowdataasync.urls["search_realm"].format(region=api.region))
     data = {"key": 1}
     mock_aioresponses.get(
         pattern,
@@ -69,7 +69,7 @@ async def test_fetch_search_realms(mock_aioresponses, mock_api_instance):
 async def test_fetch_search_items(mock_aioresponses, mock_api_instance):
     api = mock_api_instance
     search_pattern = re.compile(
-        getwowdata.urls["search_item"].format(region=api.region)
+        getwowdataasync.urls["search_item"].format(region=api.region)
     )
     pattern_dummyurl = re.compile("https://dummyurl.com/")
     search_data = {"results": [{"key": {"href": "https://dummyurl.com/"}}]}
@@ -171,7 +171,7 @@ async def test_get_item_classes_real(real_api_instance):
     assert json['item_classes']
     await api.close()
 
-    
+
 async def test_get_item_subclasses_real(real_api_instance):
     api = real_api_instance
     json = await api.get_item_subclasses(17)

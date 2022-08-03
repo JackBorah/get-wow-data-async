@@ -24,7 +24,7 @@ async def main():
     print(getwowdataasync.as_gold(total_value))
     #prints 430,846,968g 67s 00c
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy()) #if relevent
 asyncio.run(main())
 
 ```
@@ -66,7 +66,59 @@ wow_api_secret = y
 Now WowApi.create() will use those variabels to get an access token for future requests.
 
 ## API
-See [documentation site](https://get-wow-data-async.readthedocs.io/en/latest/) for the API.
+
+There are two ways to consume the World of Warcraft APIs search or get methods.
+Both types of methods require similar data like an access token, region, ...
+the WowApi class contains that data. 
+
+### Search
+Blizzard provides search for some of their APIs. Meaning that the API can be filtered by any
+of the data's fields. 
+
+Example: Searching for thunderfury. 
+```Python
+from pprint import pprint
+from getwowdataasync import WowApi
+
+async def main():
+    eu_api = await WowApi.create('eu')
+    params = {"name.en_US":"Thunderfury"}
+
+    result_item = await eu_api.item_search(**params)
+    await eu_api.close()
+    pprint(result_item)
+    #prints json containing all items with the name Thunderfury. 
+
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+asyncio.run(main())
+```
+### Get
+Most WoW APIs don't have search functionality provided by blizzard. This means
+the requests you make to them are restricted to specific fields usually an id.
+
+```python
+from pprint import pprint
+from getwowdataasync import WowApi
+
+async def main():
+    us_api = await WowApi.create('us')
+    wow_token_data = await us_api.get_wow_token()
+    await us_api.close()
+
+    pprint(wow_token_data)
+    #prints:
+    # {'_links': {'self': {'href': 'https://us.api.blizzard.com/data/wow/token/?namespace=dynamic-us'}},
+    # 'last_updated_timestamp': 1653847530000,
+    # 'price': 1656890000} 
+```
+
+```{eval-rst}
+.. automodule:: getwowdataasync.getdata
+    :imported-members:
+    :members:
+```
+
+
 ## Notes on the data
 Visit [https://develop.battle.net/documentation/world-of-warcraft](https://develop.battle.net/documentation/world-of-warcraft) for blizzard official documentation.
 
