@@ -22,7 +22,7 @@ class WowApi:
         """
         self = WowApi()
         self.region = region
-        timeout = aiohttp.ClientTimeout(connect=1, sock_read=60, sock_connect=1)
+        timeout = aiohttp.ClientTimeout(connect=5, sock_read=60, sock_connect=5)
         self.session = aiohttp.ClientSession(raise_for_status=True, timeout=timeout)
         await self._get_access_token()
         return self
@@ -78,7 +78,13 @@ class WowApi:
                 "namespace": f"dynamic-{self.region}",
             }
         }
-        if url_name in ["repice_icon", "profession_icon", "item_icon"]:
+        if url_name in [
+            "repice_icon", "profession_icon", "item_icon", 
+            "profession_index", "profession_skill_tier",
+            "profession_tier_detail", "profession_icon",
+            "recipe_detail", "repice_icon", "item_classes",
+            "item_subclass", "item_set_index", "item_icon"
+            ]:
             params = {
                 **{
                     "access_token": self.access_token,
@@ -91,13 +97,9 @@ class WowApi:
                 async with self.session.get(
                     urls[url_name].format(region=self.region, **ids), params=params
                 ) as response:
-                    if url_name in ["item_icon", "profession_icon", "recipe_icon"]:
-                        resp = await response.read()
-                        return resp
-                    else:
-                        json = await response.json()
-                        json["Date"] = response.headers["Date"]
-                        return json
+                    json = await response.json()
+                    json["Date"] = response.headers["Date"]
+                    return json
 
             except aiohttp.ClientConnectionError as e:
                 print(f"get {e}")
@@ -122,6 +124,12 @@ class WowApi:
         params = {
             "access_token": self.access_token,
             "namespace": f"static-{self.region}",
+        }
+
+        if url_name == 'search_realm':
+            params = {
+            "access_token": self.access_token,
+            "namespace": f"dynamic-{self.region}",
         }
 
         search_params = {
@@ -247,8 +255,8 @@ class WowApi:
         ids = {"profession_id": profession_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_profession_icon(self, profession_id: int) -> bytes:
-        """Returns a professions icon.
+    async def get_profession_icon(self, profession_id: int) -> dict:
+        """Returns json with a link to a professions icon.
 
         Args:
             profession_id (int): The id of a profession. Get from get_profession_index.
@@ -283,8 +291,8 @@ class WowApi:
         ids = {"recipe_id": recipe_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_recipe_icon(self, recipe_id: int) -> bytes:
-        """Returns a recipes icon by its id.
+    async def get_recipe_icon(self, recipe_id: int) -> dict:
+        """Returns a dict with a link to a recipes icon.
 
         Args:
             recipe_id (int): The id from a recipe. Found in get_profession_tier_details().
@@ -313,8 +321,8 @@ class WowApi:
         url_name = "item_set_index"
         return await self._fetch_get(url_name)
 
-    async def get_item_icon(self, item_id: int) -> bytes:
-        """Returns an item's icon by its id.
+    async def get_item_icon(self, item_id: int) -> dict:
+        """Returns a dict with a link to an item's icon.
 
         Args:
             item_id (int): The items id. Get from item_search().
@@ -341,10 +349,10 @@ class WowApi:
 async def main():
     from pprint import pprint
 
-    for i in range(10):
+    for i in range(1):
         us = await WowApi.create("us")
         start = time.time()
-        json = await us._fetch_search("search_item", {"id": "(0,30)"})
+        json = await us.get_wow_token()
         pprint(json)
         end = time.time()
         print(end - start)
