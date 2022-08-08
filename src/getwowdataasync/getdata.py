@@ -24,7 +24,7 @@ class WowApi:
         self.region = region
         timeout = aiohttp.ClientTimeout(connect=5, sock_read=60, sock_connect=5)
         self.session = aiohttp.ClientSession(raise_for_status=True, timeout=timeout)
-        await self._get_access_token()
+        self.access_token = await self._get_access_token()
         return self
 
     async def _get_access_token(
@@ -52,8 +52,7 @@ class WowApi:
                     data=token_data,
                 ) as response:
                     response = await response.json()
-                    self.access_token = response["access_token"]
-                    break
+                    return response["access_token"]
             except aiohttp.ClientConnectionError as e:
                 print(f"access token {e}")
             except aiohttp.ClientResponseError as e:
@@ -336,10 +335,11 @@ class WowApi:
         url_name = "wow_token"
         return await self._fetch_get(url_name)
 
-    # TODO
+
     async def get_connected_realm_index(self) -> dict:
         """Returns a dict of all realm's names with their connected realm id."""
-        pass
+        url_name = "connected_realm_index"
+        return await self._fetch_get(url_name)
 
     async def close(self):
         """Closes aiohttp.ClientSession."""
@@ -347,12 +347,13 @@ class WowApi:
 
 
 async def main():
+    #testing junk
     from pprint import pprint
 
     for i in range(1):
         us = await WowApi.create("us")
         start = time.time()
-        json = await us.get_wow_token()
+        json = await us.get_connected_realm_index()
         pprint(json)
         end = time.time()
         print(end - start)

@@ -198,3 +198,9 @@ async def test_get_wow_token_real(real_api_instance):
     json = await api.get_wow_token()
     assert json['price']
     await api.close()
+
+async def test_get_connected_realm_index(real_api_instance):
+    api = real_api_instance
+    json = await api.get_connected_realm_index()
+    assert json['connected_realms']
+    await api.close()
