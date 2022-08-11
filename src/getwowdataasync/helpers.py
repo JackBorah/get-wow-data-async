@@ -68,3 +68,20 @@ def convert_to_datetime(Date: str):
     sec = int(nums[4])
 
     return datetime.datetime(year, month, day, hour=hour, minute=min, second=sec)
+
+def retry(retries: int = 5):
+    """Calls the passed in function {retries} times."""
+    def retries_wrapper(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            for _ in range(retries):
+                try:
+                    return await func(*args, **kwargs)
+                except aiohttp.ClientConnectionError as e:
+                    print(f"{func.__name__} {e}")
+                except aiohttp.ClientResponseError as e:
+                    print(f'{func.__name__} {e.status}')
+                    if e.status == 429:
+                        await asyncio.sleep(1)
+        return wrapper
+    return retries_wrapper

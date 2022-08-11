@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+import functools
 
 import aiohttp
 from dotenv import load_dotenv
@@ -27,8 +28,9 @@ class WowApi:
         self.access_token = await self._get_access_token()
         return self
 
+    @retry()
     async def _get_access_token(
-        self, wow_api_id: str = None, wow_api_secret: str = None, retries: int = 5
+        self, wow_api_id: str = None, wow_api_secret: str = None
     ) -> None:
         """Retrieves battle.net client id and secret from env and makes it an attribute.
 
@@ -44,21 +46,17 @@ class WowApi:
         wow_api_id = wow_api_id
         wow_api_secret = wow_api_secret
 
-        for retry in range(retries):
-            try:
-                async with self.session.post(
-                    urls["access_token"].format(region=self.region),
-                    auth=aiohttp.BasicAuth(id, secret),
-                    data=token_data,
-                ) as response:
-                    response = await response.json()
-                    return response["access_token"]
-            except aiohttp.ClientConnectionError as e:
-                print(f"access token {e}")
-            except aiohttp.ClientResponseError as e:
-                print(f"access token {e.status}")
+        async with self.session.post(
+            urls["access_token"].format(region=self.region),
+            auth=aiohttp.BasicAuth(id, secret),
+            data=token_data,
+        ) as response:
+            response = await response.json()
+            return response["access_token"]
 
-    async def _fetch_get(self, url_name: str, ids: dict = {}, retries: int = 5) -> dict:
+
+    @retry()
+    async def _fetch_get(self, url_name: str, ids: dict = {}) -> dict:
         """Preforms a aiohttp get request for the given url_name from urls.py. Accepts ids for get methods.
 
         Args:
@@ -91,23 +89,17 @@ class WowApi:
                 }
             }
 
-        for retry in range(retries):
-            try:
-                async with self.session.get(
-                    urls[url_name].format(region=self.region, **ids), params=params
-                ) as response:
-                    json = await response.json()
-                    json["Date"] = response.headers["Date"]
-                    return json
+        async with self.session.get(
+            urls[url_name].format(region=self.region, **ids), params=params
+        ) as response:
+            json = await response.json()
+            json["Date"] = response.headers["Date"]
+            return json
 
-            except aiohttp.ClientConnectionError as e:
-                print(f"get {e}")
 
-            except aiohttp.ClientResponseError as e:
-                print(f"get {e.status}")
-
+    @retry()
     async def _fetch_search(
-        self, url_name: str, extra_params: dict, retries: int = 5
+        self, url_name: str, extra_params: dict
     ) -> dict:
         """Preforms a aiohttp get request for the given url_name from urls.py. Accepts extra_params for search methods.
 
@@ -115,7 +107,6 @@ class WowApi:
             url_name (str): The name of a url from urls.py
             extra_params (dict): Parameters for refining a search request.
                 See https://develop.battle.net/documentation/world-of-warcraft/guides/search
-            retries (int): The number of times the request will be retried on failure.
 
         Returns:
             The search results json parsed into a dict.
@@ -136,31 +127,26 @@ class WowApi:
             **extra_params,
         }
 
-        for retry in range(retries):
-            try:
-                async with self.session.get(
-                    urls[url_name].format(region=self.region), params=search_params
-                ) as response:
-                    json = await response.json()
-                    if url_name == "search_item":
-                        tasks = []
-                        if json.get("results"):
-                            for item in json["results"]:
-                                task = asyncio.create_task(
-                                    self._get_item(item["key"]["href"], params=params)
-                                )
-                                tasks.append(task)
-                        items = await asyncio.gather(*tasks)
-                        json = {}
-                        json["items"] = items
-                    json["Date"] = response.headers["Date"]
-                    return json
+        async with self.session.get(
+            urls[url_name].format(region=self.region), params=search_params
+        ) as response:
+            json = await response.json()
+            if url_name == "search_item":
+                tasks = []
+                if json.get("results"):
+                    for item in json["results"]:
+                        task = asyncio.create_task(
+                            self._get_item(item["key"]["href"], params=params)
+                        )
+                        tasks.append(task)
+                items = await asyncio.gather(*tasks)
+                json = {}
+                json["items"] = items
+            json["Date"] = response.headers["Date"]
+            return json
 
-            except aiohttp.ClientConnectionError as e:
-                print(f"search {e}")
-            except aiohttp.ClientResponseError as e:
-                print(f"search {e.status}")
 
+    @retry()
     async def _get_item(self, url: str, params: dict) -> dict:
         """Preforms a get request for an item inside an item search.
 
@@ -175,15 +161,11 @@ class WowApi:
         Returns:
             The json response from the url as a dict.
         """
-        for retry in range(5):
-            try:
-                async with self.session.get(url, params=params) as item_data:
-                    item = await item_data.json(content_type=None)
-                    return item
-            except aiohttp.ClientConnectionError as e:
-                print(f"item {e}")
-            except aiohttp.ClientResponseError as e:
-                print(e.status)
+
+        async with self.session.get(url, params=params) as item_data:
+            item = await item_data.json(content_type=None)
+            return item
+
 
     async def connected_realm_search(self, **extra_params: dict) -> dict:
         """Preforms a search of all realms in that region.
@@ -362,5 +344,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
     asyncio.run(main())
