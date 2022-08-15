@@ -9,10 +9,12 @@ from dotenv import load_dotenv
 from getwowdataasync.urls import urls
 from getwowdataasync.helpers import *
 
+
 class WowApi:
     """Instantiate with WowApi.create('region') to use its methods to query the API."""
+
     @classmethod
-    async def create(cls, region: str, locale: str = 'en_US'):
+    async def create(cls, region: str, locale: str = "en_US"):
         """Gets an instance of WowApi with an access token, region, and aiohttp session.
 
         Args:
@@ -29,9 +31,9 @@ class WowApi:
         self.access_token = await self._get_access_token()
         return self
 
-
     def retry(retries: int = 5):
         """Calls the passed in function {retries} times."""
+
         def retries_wrapper(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
@@ -43,8 +45,10 @@ class WowApi:
                     except aiohttp.ClientConnectionError as e:
                         print(f"{func.__name__} {e}")
                     except aiohttp.ClientResponseError as e:
-                        print(f'{func.__name__} {e.status}')
+                        print(f"{func.__name__} {e.status}")
+
             return wrapper
+
         return retries_wrapper
 
     @retry()
@@ -73,7 +77,6 @@ class WowApi:
             response = await response.json()
             return response["access_token"]
 
-
     @retry()
     async def _fetch_get(self, url_name: str, ids: dict = {}) -> dict:
         """Preforms a aiohttp get request for the given url_name from urls.py. Accepts ids for get methods.
@@ -92,21 +95,29 @@ class WowApi:
             **{
                 "access_token": self.access_token,
                 "namespace": f"dynamic-{self.region}",
-                "locale": self.locale
+                "locale": self.locale,
             }
         }
         if url_name in [
-            "repice_icon", "profession_icon", "item_icon", 
-            "profession_index", "profession_skill_tier",
-            "profession_tier_detail", "profession_icon",
-            "recipe_detail", "repice_icon", "item_classes",
-            "item_subclass", "item_set_index", "item_icon"
-            ]:
+            "repice_icon",
+            "profession_icon",
+            "item_icon",
+            "profession_index",
+            "profession_skill_tier",
+            "profession_tier_detail",
+            "profession_icon",
+            "recipe_detail",
+            "repice_icon",
+            "item_classes",
+            "item_subclass",
+            "item_set_index",
+            "item_icon",
+        ]:
             params = {
                 **{
                     "access_token": self.access_token,
                     "namespace": f"static-{self.region}",
-                    "locale": self.locale
+                    "locale": self.locale,
                 }
             }
 
@@ -117,11 +128,8 @@ class WowApi:
             json["Date"] = response.headers["Date"]
             return json
 
-
     @retry()
-    async def _fetch_search(
-        self, url_name: str, extra_params: dict
-    ) -> dict:
+    async def _fetch_search(self, url_name: str, extra_params: dict) -> dict:
         """Preforms a aiohttp get request for the given url_name from urls.py. Accepts extra_params for search methods.
 
         Args:
@@ -132,18 +140,18 @@ class WowApi:
         Returns:
             The search results json parsed into a dict.
         """
-        if url_name == 'search_realm':
+        if url_name == "search_realm":
             params = {
-            "access_token": self.access_token,
-            "namespace": f"dynamic-{self.region}",
-            "locale": self.locale
-        }
+                "access_token": self.access_token,
+                "namespace": f"dynamic-{self.region}",
+                "locale": self.locale,
+            }
 
-        elif url_name == 'search_item':
+        elif url_name == "search_item":
             params = {
-            "access_token": self.access_token,
-            "namespace": f"static-{self.region}",
-            "locale": self.locale
+                "access_token": self.access_token,
+                "namespace": f"static-{self.region}",
+                "locale": self.locale,
             }
 
         search_params = {
@@ -159,16 +167,12 @@ class WowApi:
                 start = time.monotonic()
                 tasks = []
                 items = {}
-                item_json = {
-                    'items': []
-                }
+                item_json = {"items": []}
                 if resp_json.get("results"):
                     for item in resp_json["results"]:
                         self.task_count += 1
-                        print(f'task count {self.task_count}')
-                        task = asyncio.create_task(
-                            self._get_item(item["key"]["href"])
-                        )
+                        print(f"task count {self.task_count}")
+                        task = asyncio.create_task(self._get_item(item["key"]["href"]))
                         tasks.append(task)
                         if len(tasks) == 100:
                             end = time.monotonic()
@@ -184,7 +188,6 @@ class WowApi:
 
             item_json["Date"] = response.headers["Date"]
             return item_json
-
 
     @retry()
     async def _get_item(self, url: str) -> dict:
@@ -203,13 +206,12 @@ class WowApi:
         params = {
             "access_token": self.access_token,
             "namespace": f"static-{self.region}",
-            "locale": self.locale
+            "locale": self.locale,
         }
 
         async with self.session.get(url, params=params) as item_data:
             item = await item_data.json(content_type=None)
             return item
-
 
     async def connected_realm_search(self, **extra_params: dict) -> dict:
         """Preforms a search of all realms in that region.
@@ -263,7 +265,7 @@ class WowApi:
 
     async def get_all_profession_data(self) -> dict:
         """Returns a nested dictionary of all profession data.
-        
+
         The structure of the returned dict is like:
             {
                 'id' : x
@@ -278,46 +280,48 @@ class WowApi:
                     }
                 }
             }
-        """ 
+        """
         profession_tree = []
         profession_index = await self.get_profession_index()
-        for prof in profession_index['professions']:
-            if prof['id'] < 1000: #only add actual professions to the tree, not weird ones like protoform synthesis
-                prof_name = prof['name']
-                prof_id = prof['id']
+        for prof in profession_index["professions"]:
+            if (
+                prof["id"] < 1000
+            ):  # only add actual professions to the tree, not weird ones like protoform synthesis
+                prof_name = prof["name"]
+                prof_id = prof["id"]
                 skill_tier_tree = []
-                profession_tree.append({
-                    'name' : prof_name,
-                    'id': prof_id,
-                    'skill_tiers' : skill_tier_tree
-                })
-                skill_tier_index = await self._get_item(prof['key']['href'])
-                pprint(skill_tier_index)
-                if skill_tier_index.get('skill_tiers'):
-                    for skill_tier in skill_tier_index['skill_tiers']:
-                        skill_tier_name = skill_tier['name']
-                        skill_tier_id = skill_tier['id']
+                profession_tree.append(
+                    {"name": prof_name, "id": prof_id, "skill_tiers": skill_tier_tree}
+                )
+                skill_tier_index = await self._get_item(prof["key"]["href"])
+                if skill_tier_index.get("skill_tiers"):
+                    for skill_tier in skill_tier_index["skill_tiers"]:
+                        skill_tier_name = skill_tier["name"]
+                        skill_tier_id = skill_tier["id"]
                         categories_tree = []
-                        skill_tier_tree.append({
-                            'name': skill_tier_name,
-                            'id': skill_tier_id,
-                            'categories': categories_tree
-                        })
-                        categories_index = await self._get_item(skill_tier['key']['href'])
-                        if categories_index.get('categories'):
-                            for category in categories_index['categories']:
-                                category_name = category['name']
+                        skill_tier_tree.append(
+                            {
+                                "name": skill_tier_name,
+                                "id": skill_tier_id,
+                                "categories": categories_tree,
+                            }
+                        )
+                        categories_index = await self._get_item(
+                            skill_tier["key"]["href"]
+                        )
+                        if categories_index.get("categories"):
+                            for category in categories_index["categories"]:
+                                category_name = category["name"]
                                 recipe_leaves = []
-                                categories_tree.append({
-                                    'name': category_name,
-                                    'recipes': recipe_leaves
-                                })
+                                categories_tree.append(
+                                    {"name": category_name, "recipes": recipe_leaves}
+                                )
                                 tasks = []
                                 recipes = []
                                 start = time.monotonic()
-                                for recipe_obj in category['recipes']:
+                                for recipe_obj in category["recipes"]:
                                     task = asyncio.create_task(
-                                        self._get_item(recipe_obj['key']['href'])
+                                        self._get_item(recipe_obj["key"]["href"])
                                     )
                                     tasks.append(task)
                                     if len(tasks) == 100:
@@ -333,7 +337,7 @@ class WowApi:
                                 if len(tasks) != 0:
                                     recipes = await asyncio.gather(*tasks)
                                     recipe_leaves += recipes
-                                    #time.sleep(1) # A second between categories is extremely inefficient but easy to avoid 429 errors
+                                    # time.sleep(1) # A second between categories is extremely inefficient but easy to avoid 429 errors
         return profession_tree
 
     async def get_profession_index(self) -> dict:
@@ -436,7 +440,6 @@ class WowApi:
         url_name = "wow_token"
         return await self._fetch_get(url_name)
 
-
     async def get_connected_realm_index(self) -> dict:
         """Returns a dict of all realm's names with their connected realm id."""
         url_name = "connected_realm_index"
@@ -448,12 +451,12 @@ class WowApi:
 
 
 async def main():
-    #testing junk
+    # testing junk
     for i in range(1):
         us = await WowApi.create("us")
         start = time.time()
         json = await us.get_all_profession_data()
-        #pprint(json)
+        # pprint(json)
         end = time.time()
         print(end - start)
         await us.close()
