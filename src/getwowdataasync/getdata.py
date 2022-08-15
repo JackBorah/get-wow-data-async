@@ -263,23 +263,27 @@ class WowApi:
         ids = {"connected_realm_id": connected_realm_id}
         return await self._fetch_get(url_name, ids)
 
-    async def get_all_profession_data(self) -> dict:
+    async def get_all_profession_data(self) -> list:
         """Returns a nested dictionary of all profession data.
 
         The structure of the returned dict is like:
-            {
-                'id' : x
-                'proffession': {
-                    'id' : y
-                    'tiers' : {
+            [
+                {
+                    'name' : 'Inscription'
+                    'id' : x
+                    'skill_tiers' : {
+                        'name' : 'Shadowlands Inscription'
+                        'id' : y
                         'categories' : {
-                            'recipes' : {
-                                'recipe : {recipe data...}
-                            }
+                            'name' : 'some name'
+                            'recipes' : [
+                                    {recipe data...},
+                                    {recipe2 data...},
+                            ]
                         }
                     }
                 }
-            }
+            ]
         """
         profession_tree = []
         profession_index = await self.get_profession_index()
