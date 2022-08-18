@@ -1,7 +1,9 @@
 import os
 import re
+import asyncio
 
 import pytest
+import pytest_asyncio
 from aioresponses import aioresponses
 import getwowdataasync
 from getwowdataasync.getdata import WowApi
@@ -14,7 +16,7 @@ def mock_aioresponses():
         yield mocked
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def mock_api_instance(mock_aioresponses):
     data = {"access_token": "dummytoken"}
     #os.environ["wow_api_id"] = "dummyid"
@@ -24,7 +26,7 @@ async def mock_api_instance(mock_aioresponses):
     )
     return await getwowdataasync.WowApi.create("us")
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def real_api_instance():
     return await getwowdataasync.WowApi.create("us")
 
@@ -98,7 +100,8 @@ async def test_fetch_search_items(mock_aioresponses, mock_api_instance):
 async def test_connected_realm_search_real(real_api_instance):
     api = real_api_instance
     json = await api.connected_realm_search()
-    assert json['results']
+    print(f'connected_realm print {json}')
+    assert json['realms']
     await api.close()
 
     
@@ -204,3 +207,5 @@ async def test_get_connected_realm_index(real_api_instance):
     json = await api.get_connected_realm_index()
     assert json['connected_realms']
     await api.close()
+
+# TODO test get all recipe data
