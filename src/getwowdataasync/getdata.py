@@ -2,6 +2,7 @@ import asyncio
 import os
 import time
 import functools
+from pprint import pprint
 
 import aiohttp
 from dotenv import load_dotenv
@@ -60,7 +61,6 @@ class WowApi:
         Args:
             wow_api_id (str): The id from a battle.net api client.
             wow_api_secret (str): The secret from a battle.net api client.
-            retries (int): The number of times the request will be retried on failure.
         """
         load_dotenv()
         id = os.environ["wow_api_id"]
@@ -85,7 +85,6 @@ class WowApi:
             url_name (str): The name of a url from urls.py
             ids (dict): The ids that need to be send with the revelant url_name.
                 Such as some item_id.
-            retries (int): The number of times the request will be retried on failure.
 
         Returns:
             The content from an endpoint as binary or a dict depending if the request
@@ -163,38 +162,52 @@ class WowApi:
             urls[url_name].format(region=self.region), params=search_params
         ) as response:
             resp_json = await response.json()
+            start = time.monotonic()
+            tasks = []
             if url_name == "search_item":
-                start = time.monotonic()
-                tasks = []
-                items = {}
                 item_json = {"items": []}
-                if resp_json.get("results"):
-                    for item in resp_json["results"]:
-                        self.task_count += 1
-                        print(f"task count {self.task_count}")
-                        task = asyncio.create_task(self._get_item(item["key"]["href"]))
-                        tasks.append(task)
-                        if len(tasks) == 100:
-                            end = time.monotonic()
-                            elapsed = end - start
-                            print(elapsed)
-                            if elapsed < 1:
-                                time.sleep(1 - elapsed)
-                            items = await asyncio.gather(*tasks)
-                            item_json["items"] += items
-                            tasks = []
-                            items = []
-                            start = time.monotonic()
+            elif url_name == "search_realm":
+                realm_json = {"realms": []}
 
-            item_json["Date"] = response.headers["Date"]
-            return item_json
+            if resp_json.get("results"):
+                for item in resp_json["results"]:
+                    task = asyncio.create_task(self._get_item(item["key"]["href"]))
+                    tasks.append(task)
+                    if len(tasks) == 100:
+                        end = time.monotonic()
+                        elapsed = end - start
+                        print(f'100 requests executed in {elapsed}')
+                        if elapsed < 1:
+                            time.sleep(1 - elapsed)
+                        task_results = await asyncio.gather(*tasks)
+                        if url_name == "search_item":
+                            item_json["items"] += task_results
+                        elif url_name == "search_realm":
+                            realm_json["realms"] += task_results
+                        tasks = []
+                        task_results = []
+                        start = time.monotonic()
+
+            task_results = await asyncio.gather(*tasks)
+
+            if url_name == "search_item":
+                item_json["items"] += task_results
+                item_json["Date"] = response.headers["Date"]
+                return item_json
+
+            elif url_name == "search_realm":
+                realm_json["realms"] += task_results
+                realm_json["Date"] = response.headers["Date"]
+                return realm_json
+
 
     @retry()
     async def _get_item(self, url: str) -> dict:
-        """Preforms a get request for an item inside an item search.
+        """Preforms a get request.
 
-        This is a general session.get() but it is currently used in item_search()
-        to get detailed item data from the href's in the search results.
+        This is a general session.get() but it is 
+        to get detailed item data from the href's 
+        in the search results.
 
         Args:
             url (str): The url to query.
@@ -219,7 +232,6 @@ class WowApi:
         Args:
             extra_params (dict): Parameters for refining a search request.
                 See https://develop.battle.net/documentation/world-of-warcraft/guides/search
-            retries (int): The number of times the request will be retried on failure.
 
         Returns:
             The search results as json parsed into a dict.
@@ -233,7 +245,6 @@ class WowApi:
         Args:
             extra_params (dict): Parameters for refining a search request.
                 See https://develop.battle.net/documentation/world-of-warcraft/guides/search
-            retries (int): The number of times the request will be retried on failure.
 
         Returns:
             The search results as json parsed into a dict.
@@ -269,19 +280,24 @@ class WowApi:
         The structure of the returned dict is like:
             [
                 {
-                    'name' : 'Inscription'
-                    'id' : x
-                    'skill_tiers' : {
-                        'name' : 'Shadowlands Inscription'
-                        'id' : y
-                        'categories' : {
-                            'name' : 'some name'
-                            'recipes' : [
-                                    {recipe data...},
-                                    {recipe2 data...},
+                    'name' : 'Inscription',
+                    'id' : x,
+                    'skill_tiers' : [
+                        {
+                            'name' : 'Shadowlands Inscription',
+                            'id' : y,
+                            'categories' : [
+                                {
+                                'name' : 'some name',
+                                'recipes' : [
+                                        {recipe data...},
+                                        {recipe2 data...},
+                                ]
+                                }
                             ]
+
                         }
-                    }
+                    ]
                 }
             ]
         """
@@ -453,14 +469,14 @@ class WowApi:
         """Closes aiohttp.ClientSession."""
         await self.session.close()
 
-
+"""
 async def main():
     # testing junk
     for i in range(1):
         us = await WowApi.create("us")
         start = time.time()
-        json = await us.get_all_profession_data()
-        # pprint(json)
+        json = await us.connected_realm_search()
+        pprint(json)
         end = time.time()
         print(end - start)
         await us.close()
@@ -469,3 +485,4 @@ async def main():
 if __name__ == "__main__":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
+"""
