@@ -27,26 +27,50 @@ class WowApi:
         self = WowApi()
         self.region = region
         self.locale = locale
-        timeout = aiohttp.ClientTimeout(connect=5, sock_read=180, sock_connect=5)
+        self.queue = asyncio.Queue()
+        timeout = aiohttp.ClientTimeout(connect=5, sock_read=360, sock_connect=5)
         self.session = aiohttp.ClientSession(raise_for_status=True, timeout=timeout)
         self.access_token = await self._get_access_token()
         return self
 
-    def retry(retries: int = 5):
+    def retry():
+        def retries_wrapper(func):
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                while True:
+                    try:
+                        json = await func(*args, **kwargs)
+                        await asyncio.sleep(1 / 10)
+                        return json
+                    except aiohttp.ClientConnectionError as e:
+                        print(f"{func.__name__} {e}")
+                    except aiohttp.ClientResponseError as e:
+                        print(f"{func.__name__} {e}")
+                    except aiohttp.ClientPayloadError as e:
+                        print(f"{func.__name__} {e}")
+
+            return wrapper
+
+        return retries_wrapper
+
+    def retry_queue():
         """Calls the passed in function {retries} times."""
 
         def retries_wrapper(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
-                start = time.monotonic()
-                for _ in range(retries):
-                    try:
-                        json = await func(*args, **kwargs)
-                        return json
-                    except aiohttp.ClientConnectionError as e:
-                        print(f"{func.__name__} {e}")
-                    except aiohttp.ClientResponseError as e:
-                        print(f"{func.__name__} {e.status}")
+                try:
+                    json = await func(*args, **kwargs)
+                    return json
+                except aiohttp.ClientConnectionError as e:
+                    print(f"{func.__name__} {e}")
+                    args[0].queue.put_nowait(args[1])
+                except aiohttp.ClientResponseError as e:
+                    print(f"{func.__name__} {e}")
+                    args[0].queue.put_nowait(args[1])
+                except aiohttp.ClientPayloadError as e:
+                    print(f"{func.__name__} {e}")
+                    args[0].queue.put_nowait(args[1])
 
             return wrapper
 
@@ -124,20 +148,20 @@ class WowApi:
             urls[url_name].format(region=self.region, **ids), params=params
         ) as response:
             json = await response.json()
-            json["Date"] = response.headers["Date"]
             return json
 
     @retry()
     async def _fetch_search(self, url_name: str, extra_params: dict) -> dict:
-        """Preforms a aiohttp get request for the given url_name from urls.py. Accepts extra_params for search methods.
+        """Makes a get request to either the items or search endpoitns.
+
+        Errors are retried immediately after a 1/10 second delay per retry.
 
         Args:
-            url_name (str): The name of a url from urls.py
-            extra_params (dict): Parameters for refining a search request.
-                See https://develop.battle.net/documentation/world-of-warcraft/guides/search
+            url_name (str): The name of the url from urls.py.
+            extra_params (dict): A dict containing search filters.
 
         Returns:
-            The search results json parsed into a dict.
+            Json parsed as a dict.
         """
         if url_name == "search_realm":
             params = {
@@ -161,52 +185,76 @@ class WowApi:
         async with self.session.get(
             urls[url_name].format(region=self.region), params=search_params
         ) as response:
-            resp_json = await response.json()
-            start = time.monotonic()
-            tasks = []
-            if url_name == "search_item":
-                item_json = {"items": []}
-            elif url_name == "search_realm":
-                realm_json = {"realms": []}
+            return await response.json()
 
-            if resp_json.get("results"):
-                for item in resp_json["results"]:
-                    task = asyncio.create_task(self._get_item(item["key"]["href"]))
-                    tasks.append(task)
-                    if len(tasks) == 100:
-                        end = time.monotonic()
-                        elapsed = end - start
-                        print(f'100 requests executed in {elapsed}')
-                        if elapsed < 1:
-                            time.sleep(1 - elapsed)
-                        task_results = await asyncio.gather(*tasks)
-                        if url_name == "search_item":
-                            item_json["items"] += task_results
-                        elif url_name == "search_realm":
-                            realm_json["realms"] += task_results
-                        tasks = []
-                        task_results = []
-                        start = time.monotonic()
+    @retry_queue()
+    async def _fetch_search_queue(self, url_name: str, extra_params: dict) -> dict:
+        """Makes a get request to either the items or search endpoitns.
 
-            task_results = await asyncio.gather(*tasks)
+        Upon some errors the url will be added back to the queue to be retried later.
+        Only for use with functions that use the queue.
 
-            if url_name == "search_item":
-                item_json["items"] += task_results
-                item_json["Date"] = response.headers["Date"]
-                return item_json
+        Args:
+            url_name (str): The name of the url from urls.py.
+            extra_params (dict): A dict containing search filters.
 
-            elif url_name == "search_realm":
-                realm_json["realms"] += task_results
-                realm_json["Date"] = response.headers["Date"]
-                return realm_json
+        Returns:
+            Json parsed as a dict.
+        """
+        if url_name == "search_realm":
+            params = {
+                "access_token": self.access_token,
+                "namespace": f"dynamic-{self.region}",
+                "locale": self.locale,
+            }
 
+        elif url_name == "search_item":
+            params = {
+                "access_token": self.access_token,
+                "namespace": f"static-{self.region}",
+                "locale": self.locale,
+            }
+
+        search_params = {
+            **params,
+            **extra_params,
+        }
+
+        async with self.session.get(
+            urls[url_name].format(region=self.region), params=search_params
+        ) as response:
+            return await response.json()
 
     @retry()
     async def _get_item(self, url: str) -> dict:
         """Preforms a get request.
 
-        This is a general session.get() but it is 
-        to get detailed item data from the href's 
+        This is a general session.get() but it is
+        to get detailed item data from the href's
+        in the search results.
+
+        Args:
+            url (str): The url to query.
+
+        Returns:
+            The json response from the url as a dict.
+        """
+        params = {
+            "access_token": self.access_token,
+            "namespace": f"static-{self.region}",
+            "locale": self.locale,
+        }
+
+        async with self.session.get(url, params=params) as item_data:
+            item = await item_data.json(content_type=None)
+            return item
+
+    @retry_queue()
+    async def _get_item_queue(self, url: str) -> dict:
+        """Preforms a get request but places retries into the queue.
+
+        This is a general session.get() but it is
+        to get detailed item data from the href's
         in the search results.
 
         Args:
@@ -226,6 +274,79 @@ class WowApi:
             item = await item_data.json(content_type=None)
             return item
 
+    async def search_enqueue_all(self, url_name: str):
+        """Adds all urls from an item or realm search to the queue.
+
+        A worker is then needed to remove urls from the queue and make requests with them.
+        """
+        extra_params = {"id": f"[{0},]", "orderby": "id", "_pageSize": 1000}
+
+        json = await self._fetch_search_queue(url_name, extra_params)
+
+        print("Adding elements to queue...")
+        while json["results"]:
+            for item in json["results"]:
+                url = item["key"]["href"]
+                self.queue.put_nowait(url)
+            print(f"queue size: {self.queue.qsize()}")
+            id = (
+                json["results"][-1]["data"]["id"] + 1
+            )  # +1 so that the last item search returns empty
+            extra_params = {"orderby": "id", "id": f"[{id},]", "_pageSize": 1000}
+
+            json = await self._fetch_search_queue(url_name, extra_params)
+
+        print("Finished adding elements to the queue!")
+        print(f"queue size {self.queue.qsize()}")
+
+    async def search_worker(self, url_name: str):
+        if url_name == "search_item":
+            item_json = {"items": []}
+        elif url_name == "search_realm":
+            realm_json = {"realms": []}
+
+        request_count = 0
+        while not self.queue.empty():
+            tasks = []
+            # start timing 100 task execution
+            start = time.perf_counter()
+            while len(tasks) < 100:
+                if self.queue.empty():
+                    break
+                url = self.queue.get_nowait()
+                task = asyncio.create_task(self._get_item_queue(url))
+                tasks.append(task)
+                request_count += 1
+                await asyncio.sleep(1 / 10)
+            finished_tasks = await asyncio.gather(*tasks)
+            end = time.perf_counter()
+            elapsed = end - start
+            print(f"100 tasks finished in: {elapsed}")
+            last_id = finished_tasks[-1]["id"]
+            print(f"last id: {last_id}")
+            if url_name == "search_item":
+                item_json["items"] += finished_tasks
+            elif url_name == "search_realm":
+                realm_json["realms"] += finished_tasks
+
+            tasks = []
+
+        if url_name == "search_item":
+            return item_json
+
+        elif url_name == "search_realm":
+            return realm_json
+
+    async def get_all_items(self):
+        await self.search_enqueue_all("search_item")
+        json = await self.search_worker("search_item")
+        return json
+
+    async def get_all_realms(self):
+        await self.search_enqueue_all("search_realm")
+        json = await self.search_worker("search_realm")
+        return json
+
     async def connected_realm_search(self, **extra_params: dict) -> dict:
         """Preforms a search of all realms in that region.
 
@@ -237,7 +358,8 @@ class WowApi:
             The search results as json parsed into a dict.
         """
         url_name = "search_realm"
-        return await self._fetch_search(url_name, extra_params=extra_params)
+        realm_json = await self._fetch_search(url_name, extra_params=extra_params)
+        return realm_json
 
     async def item_search(self, **extra_params: dict) -> dict:
         """Preforms a search of all items.
@@ -250,7 +372,8 @@ class WowApi:
             The search results as json parsed into a dict.
         """
         url_name = "search_item"
-        return await self._fetch_search(url_name, extra_params=extra_params)
+        items_json = await self._fetch_search(url_name, extra_params)
+        return items_json
 
     async def get_connected_realms_by_id(self, connected_realm_id: int) -> dict:
         """Returns the all realms in a connected realm by their connected realm id.
@@ -302,7 +425,9 @@ class WowApi:
             ]
         """
         profession_tree = []
+        print("getting profession index...")
         profession_index = await self.get_profession_index()
+        print("got profession index!")
         for prof in profession_index["professions"]:
             if (
                 prof["id"] < 1000
@@ -313,6 +438,7 @@ class WowApi:
                 profession_tree.append(
                     {"name": prof_name, "id": prof_id, "skill_tiers": skill_tier_tree}
                 )
+                print("getting skill tier")
                 skill_tier_index = await self._get_item(prof["key"]["href"])
                 if skill_tier_index.get("skill_tiers"):
                     for skill_tier in skill_tier_index["skill_tiers"]:
@@ -326,6 +452,7 @@ class WowApi:
                                 "categories": categories_tree,
                             }
                         )
+                        print("getting category")
                         categories_index = await self._get_item(
                             skill_tier["key"]["href"]
                         )
@@ -339,16 +466,17 @@ class WowApi:
                                 tasks = []
                                 recipes = []
                                 start = time.monotonic()
+                                print("getting recipes")
                                 for recipe_obj in category["recipes"]:
                                     task = asyncio.create_task(
                                         self._get_item(recipe_obj["key"]["href"])
                                     )
+                                    await asyncio.sleep(1 / 10)
                                     tasks.append(task)
                                     if len(tasks) == 100:
                                         end = time.monotonic()
                                         elapsed = end - start
-                                        if elapsed < 1:
-                                            time.sleep(1 - elapsed)
+                                        print(elapsed)
                                         recipes = await asyncio.gather(*tasks)
                                         recipe_leaves += recipes
                                         tasks = []
@@ -357,7 +485,7 @@ class WowApi:
                                 if len(tasks) != 0:
                                     recipes = await asyncio.gather(*tasks)
                                     recipe_leaves += recipes
-                                    # time.sleep(1) # A second between categories is extremely inefficient but easy to avoid 429 errors
+
         return profession_tree
 
     async def get_profession_index(self) -> dict:
@@ -469,14 +597,24 @@ class WowApi:
         """Closes aiohttp.ClientSession."""
         await self.session.close()
 
-"""
+
 async def main():
     # testing junk
+    # last item currently in wow db = 199921
     for i in range(1):
         us = await WowApi.create("us")
         start = time.time()
-        json = await us.connected_realm_search()
+        # json = await us.item_search(**{'orderby':'id', '_pageSize':1000, 'id':'[0,]'})
+        # json = await us._fetch_search('search_item',{'orderby':'id:desc', '_pageSize':2,})
+        # json = await us._fetch_search('search_item',{'id':199921})
+        # await us.search_enqueue_all('search_item')
+        # json = await us.get_all_items_v2()
+        # json = await us.get_all_items()
+        # await us._search_enqueue("search_item", {'orderby':'id', '_pageSize':1000, 'id':'[0,]'})
+        json = await us.get_all_profession_data()
         pprint(json)
+        # len_items = len(json['items'])
+        # print(f'items in json: {len_items}')
         end = time.time()
         print(end - start)
         await us.close()
@@ -485,4 +623,3 @@ async def main():
 if __name__ == "__main__":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
-"""
