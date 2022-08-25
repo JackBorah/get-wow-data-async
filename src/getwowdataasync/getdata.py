@@ -1,3 +1,8 @@
+#TODO consider changing all functions to use a prioiry queue
+#retries go at the bottom so they are immediatly executed.
+#all functions would have to have a enqueue part and a queue
+#worker that processes and clears the queue.
+
 import asyncio
 import os
 import time
@@ -281,7 +286,7 @@ class WowApi:
         """
         extra_params = {"id": f"[{0},]", "orderby": "id", "_pageSize": 1000}
 
-        json = await self._fetch_search_queue(url_name, extra_params)
+        json = await self._fetch_search(url_name, extra_params)
 
         print("Adding elements to queue...")
         while json["results"]:
@@ -294,7 +299,7 @@ class WowApi:
             )  # +1 so that the last item search returns empty
             extra_params = {"orderby": "id", "id": f"[{id},]", "_pageSize": 1000}
 
-            json = await self._fetch_search_queue(url_name, extra_params)
+            json = await self._fetch_search(url_name, extra_params)
 
         print("Finished adding elements to the queue!")
         print(f"queue size {self.queue.qsize()}")
@@ -302,7 +307,7 @@ class WowApi:
     async def search_worker(self, url_name: str):
         if url_name == "search_item":
             item_json = {"items": []}
-        elif url_name == "search_realm":
+        elif url_name == "search_realm": 
             realm_json = {"realms": []}
 
         request_count = 0
@@ -314,11 +319,14 @@ class WowApi:
                 if self.queue.empty():
                     break
                 url = self.queue.get_nowait()
-                task = asyncio.create_task(self._get_item_queue(url))
+                task = asyncio.create_task(self._get_item(url))
                 tasks.append(task)
                 request_count += 1
                 await asyncio.sleep(1 / 10)
             finished_tasks = await asyncio.gather(*tasks)
+            for ele in finished_tasks:
+                if ele == None:
+                    finished_tasks.remove(None)
             end = time.perf_counter()
             elapsed = end - start
             print(f"100 tasks finished in: {elapsed}")
@@ -335,7 +343,7 @@ class WowApi:
             return item_json
 
         elif url_name == "search_realm":
-            return realm_json
+            return realm_json # a list of connected realm clusters
 
     async def get_all_items(self):
         await self.search_enqueue_all("search_item")

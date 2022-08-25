@@ -100,7 +100,7 @@ async def test_fetch_search_with_items(mock_aioresponses, mock_api_instance):
 
 async def test_search_enqueue_all(mock_api_instance):
     api = mock_api_instance
-    api._fetch_search_queue = AsyncMock(
+    api._fetch_search = AsyncMock(
         return_value={
             "results": [
                 {
@@ -110,7 +110,7 @@ async def test_search_enqueue_all(mock_api_instance):
         }
     )
     try:
-        await api.search_enqueue_all("mock_url")
+        await api.search_enqueue_all("search_realm")
     except KeyError:  # skips checking for last id
         pass
     actual_element = api.queue.get_nowait()
@@ -120,7 +120,7 @@ async def test_search_enqueue_all(mock_api_instance):
 
 async def test_search_worker(mock_api_instance):
     api = mock_api_instance
-    api._get_item_queue = AsyncMock(return_value={"id": 3, "name": "test item"})
+    api._get_item = AsyncMock(return_value={"id": 3, "name": "test item"})
     api.queue.put_nowait("https://dummyurl.com/")
     actual_result = await api.search_worker("search_item")
     expected_result = {"items": [{"id": 3, "name": "test item"}]}
