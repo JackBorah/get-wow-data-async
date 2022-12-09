@@ -1,6 +1,11 @@
 """This module contains functions that preform common tasks."""
 import re
 import datetime
+import functools
+import asyncio
+
+import aiohttp
+# Importing WowApi into this file caueses a circulat import error when running tests
 
 
 def as_gold(amount: int) -> str:
@@ -62,3 +67,45 @@ def convert_to_datetime(Date: str):
     sec = int(nums[4])
 
     return datetime.datetime(year, month, day, hour=hour, minute=min, second=sec)
+
+def retry(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        retries = 0
+        while retries < 10:
+            try:
+                json = await func(*args, **kwargs)
+                await asyncio.sleep(1)
+                return json
+            except aiohttp.ClientConnectionError as e:
+                print(f"{func.__name__} {e}")
+                retries += 1
+            except aiohttp.ClientResponseError as e:
+                print(f"{func.__name__} {e}")
+                retries += 1
+            except aiohttp.ClientPayloadError as e:
+                print(f"{func.__name__} {e}")
+                retries += 1
+
+    return wrapper
+
+# This is probally useless but i don't want to delete it completely
+# def retry_queue(func):
+#     @functools.wraps(func)
+#     async def wrapper(WowApi: WowApi ,*args, **kwargs):
+#         try:
+#             self = args[0]
+#             json = await func(*args, **kwargs)
+#             return json
+#         except aiohttp.ClientConnectionError as e:
+#             print(f"{func.__name__} {e}")
+#             self = args[0] # This is needed since the args are passed at runtime
+#             self.queue.put_nowait(args[1]) # args[1] is the function being decorated
+#         except aiohttp.ClientResponseError as e:
+#             print(f"{func.__name__} {e}")
+#             args[0].queue.put_nowait(args[1])
+#         except aiohttp.ClientPayloadError as e:
+#             print(f"{func.__name__} {e}")
+#             args[0].queue.put_nowait(args[1])
+
+#     return wrapper

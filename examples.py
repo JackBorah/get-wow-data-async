@@ -1,3 +1,6 @@
+# TODO update all docstrings, examples, the readme and build new
+# readthedocs version
+
 import getwowdataasync
 import asyncio
 

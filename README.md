@@ -1,3 +1,5 @@
+# THIS README IS NOT UPDATED TO 0.2.0.0
+
 # get-wow-data-async
 
 **get-wow-data-async** implements asynchronous requests to the World of Warcraft (WoW) APIs so you don't have to.
