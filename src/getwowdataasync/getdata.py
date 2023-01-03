@@ -22,8 +22,6 @@
 
 import asyncio
 import os
-import time
-import functools
 from pprint import pprint
 from urllib.parse import urljoin
 
@@ -199,7 +197,6 @@ class WowApi:
         realms = []
 
         for realm in connected_realms_index['connected_realms']:
-            print(len(realms))
             realm = await self._get_data(realm['href'])
             realms.append(realm)
         
@@ -465,6 +462,7 @@ class WowApi:
     async def close(self):
         """Closes aiohttp.ClientSession."""
         await self.session.close()
+        await asyncio.sleep(0.1)
 
 
      # TODO remove if unused (most likely)
