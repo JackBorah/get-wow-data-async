@@ -1,31 +1,8 @@
-## TODO 11/15/2022
-## Refactoring to be clean
-# Change class, method names to be clearer
-    # Change name WowApi to WowApiClient
-    # Change get functions name to consume or query?
-# Create timeout class which would be passed into WowApiClient, setting timeout params ???
-# Reorganize so caller is above callee
-# Remove unused code
-# make it useable with the 'with' keyword 
-    # I think this was so WowApi.close() wouldn't need to be called
-# see if one of the retry functions is useless
-# remove unused code
-# decompose functions into smaller better named ones
-# shrink bloated docstrings?
-# make a data structure that attaches parsed json and useful response metadata
-    # like .ok and return this instead of vanilla dicts from get_x()
-    # then tests could access .ok or .url to see why it passed or failed
-
-### Whats the purpose of this package?
-### Abstract away making requests to World of Warcrafts Api's.
-### Therefore anything at the level of API requests would belong here.
-
 import asyncio
 import os
-from pprint import pprint
 from urllib.parse import urljoin
 
-import aiohttp
+import httpx
 from dotenv import load_dotenv
 
 from getwowdataasync.urls import *
@@ -56,8 +33,6 @@ class WowApi:
         self = WowApi()
         self.region = region
         self.locale = locale
-        self.timeout = aiohttp.ClientTimeout(connect=5, sock_read=360, sock_connect=5)
-        self.session = aiohttp.ClientSession(raise_for_status=True, timeout=self.timeout)
         self.access_token = await self._get_access_token(wow_api_id=wow_api_id, wow_api_secret=wow_api_secret)
         return self
 
@@ -69,13 +44,11 @@ class WowApi:
         token_data = {"grant_type": "client_credentials"}
         id = wow_api_id or os.environ["wow_api_id"]
         secret = wow_api_secret or os.environ["wow_api_secret"]
+        formatted_access_token_url = access_token_url.format(region=self.region)
 
-        async with self.session.post(
-            access_token_url.format(region=self.region),
-            auth=aiohttp.BasicAuth(id, secret),
-            data=token_data,
-        ) as response:
-            response = await response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.post(formatted_access_token_url, auth=(id, secret), data=token_data)
+            response = response.json()
             return response["access_token"]
 
     # TODO make a url class with format, ... methods
@@ -120,12 +93,10 @@ class WowApi:
     # aka with and without region, or other params specified
     async def _make_get_request(self, url: str, path_ids: dict = {}, params: dict = {}):
         formatted_url = self._format_url(url, path_ids)
-        
-        async with self.session.get(
-            formatted_url, params=params
-        ) as response:
-            json = await response.json()
-            return json
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(formatted_url, params=params)
+            return response.json()
 
     @retry
     async def _search_data(self, url_name: str, search_parameters: dict = {}) -> dict:
@@ -143,11 +114,9 @@ class WowApi:
         return json_response
 
     async def _make_search_request(self, url: str, search_parameters: dict = {}):
-        async with self.session.get(
-            url, params=search_parameters
-        ) as response:
-            json = await response.json()
-            return json
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=search_parameters)
+            return response.json()
 
     async def get_all_items(self) -> list:
         """Adds all urls from an item or realm search to the queue.
@@ -459,10 +428,15 @@ class WowApi:
         url_name = "connected_realm_index"
         return await self._get_data(url_name)
 
+    async def get_modified_crafting_reagent_slot_type_index(self) -> dict:
+        url_name = "modified_crafting_reagent_slot_type_index"
+        return await self._get_data(url_name)
+
     async def close(self):
         """Closes aiohttp.ClientSession."""
-        await self.session.close()
-        await asyncio.sleep(0.1)
+        pass
+        # await self.session.close()
+        # await asyncio.sleep(0.1)
 
 
      # TODO remove if unused (most likely)

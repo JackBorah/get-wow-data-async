@@ -2,12 +2,10 @@
 
 import unittest
 import asyncio
-import aiohttp
 from pprint import pprint
 
 from getwowdataasync import WowApi
 from getwowdataasync.urls import *
-from urllib.parse import urljoin
 
 class TestSlowMethods(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -47,3 +45,6 @@ class TestSlowMethods(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(actual_response) # TODO change to check if last item is the expectd item
 
+if __name__ == "__main__":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    unittest.main()

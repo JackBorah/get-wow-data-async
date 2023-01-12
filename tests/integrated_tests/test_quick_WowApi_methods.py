@@ -1,7 +1,5 @@
 import unittest
 import asyncio
-import aiohttp
-from pprint import pprint
 
 from getwowdataasync import WowApi
 from getwowdataasync.urls import *
@@ -12,9 +10,7 @@ class TestFasterMethods(unittest.IsolatedAsyncioTestCase):
         self.TestApi = await WowApi.create("us")
 
     async def asyncTearDown(self):
-        await asyncio.sleep(0) # prevents an annoying warning
         await self.TestApi.close()
-        await asyncio.sleep(1/10) # prevents an annoying warning
 
     async def test_search_data_with_realms(self):
         ordering = {"orderby": "id"}
@@ -35,15 +31,15 @@ class TestFasterMethods(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(expected_id, actual_id)
 
     async def test_make_search_request(self):
+        # add namespace and access token to manually build a search request that executes correctly
+        access_token = self.TestApi.access_token
         url = urljoin(base_url, paths['search_item'])
         url = url.format(region='us')
-        try:
-            json = await self.TestApi._make_search_request(url)
-        except aiohttp.ClientResponseError as e:
-            # this func just makes a get request
-            # it succeeding means making a good
-            # request who cares if it is a 401
-            self.assertEqual(e.status, 401)
+        "?namespace=static-us&tags=item&orderby=id&_page=1&access_token=USP7NKm0i6ivw1nORk9gFu4Xrsx4DfM0wQ"
+        querystring = "?" + "namespace=static-us" + "&" + f"access_token={access_token}"
+        url = url + querystring
+        json = await self.TestApi._make_search_request(url)
+        self.assertTrue(json)
 
     async def test_connected_realm_search(self):
         ordering = {"id": "[0,]", "orderby": "id", "_pageSize": 1}
@@ -160,6 +156,11 @@ class TestFasterMethods(unittest.IsolatedAsyncioTestCase):
         actual_response = await self.TestApi.get_connected_realm_index()
 
         self.assertTrue(actual_response['connected_realms']) # TODO change to check if last item is the expectd item
+
+    async def test_get_modified_crafting_reagent_slot_type_index(self):
+        actual_response = await self.TestApi.get_modified_crafting_reagent_slot_type_index()
+
+        self.assertTrue(actual_response['slot_types'])
 
 if __name__ == "__main__":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

@@ -25,6 +25,7 @@ paths = {
     "search_item": "data/wow/search/item",
     "search_media": "data/wow/search/media",
     "item_bonuses": "https://www.raidbots.com/static/data/live/bonuses.json",
+    "modified_crafting_reagent_slot_type_index": "data/wow/modified-crafting/reagent-slot-type/index"
 }
 
 urls_with_static_namespace = [
@@ -42,5 +43,6 @@ urls_with_static_namespace = [
         "item_set_index",
         "item_icon",
         "search_item",
-        "item"
+        "item",
+        "modified_crafting_reagent_slot_type_index"
     ]

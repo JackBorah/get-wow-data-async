@@ -1,10 +1,4 @@
-# TODO 11/15/2022
-# Reorganize into more singular classes ???
-
-import os
-import re
 import asyncio
-from pprint import pprint
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urljoin
@@ -14,6 +8,9 @@ from getwowdataasync.urls import *
 from getwowdataasync.getdata import WowApi
 from getwowdataasync.helpers import *
 from dotenv import load_dotenv
+
+
+# TODO Still uses aiohttp and is BOKEN because of it. Integreated tests work though.
 
 def create_mock_get_response(self, mock_get, dummy_response):
     mock_get.return_value.__aenter__.return_value.json = AsyncMock(return_value=dummy_response)
@@ -77,16 +74,6 @@ class TestGetDataIsSuccessful(unittest.IsolatedAsyncioTestCase):
         expected_locale = 'en_US'
 
         self.assertEqual(expected_locale, actual_locale)
-
-    async def test_WowApi_has_expected_timeout(self):
-        actual_timeout = self.TestApi.session.timeout
-
-        self.assertIsInstance(actual_timeout, aiohttp.ClientTimeout)
-
-    async def test_WowApi_has_expected_session(self):
-        actual_session = self.TestApi.session
-
-        self.assertIsInstance(actual_session, aiohttp.ClientSession)
 
     def test_make_required_auth_and_query_params_correctly_matches_to_dynamic(self):
         params = self.TestApi._make_required_auth_and_query_params("connected_realm_index")
