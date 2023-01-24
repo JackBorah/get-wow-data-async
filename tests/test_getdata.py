@@ -3,28 +3,38 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urljoin
 
-import aiohttp
 from getwowdataasync.urls import *
 from getwowdataasync.getdata import WowApi
 from getwowdataasync.helpers import *
-from dotenv import load_dotenv
 
 
-# TODO Still uses aiohttp and is BOKEN because of it. Integreated tests work though.
+# TODO Still uses aiohttp and is BOKEN because of it. Integreated QUICK tests work though.
 
-def create_mock_get_response(self, mock_get, dummy_response):
-    mock_get.return_value.__aenter__.return_value.json = AsyncMock(return_value=dummy_response)
+class MockResponse():
+    def __init__(self, dummy_response):
+        self.mock_data = dummy_response
+
+    def json(self):
+        return self.mock_data
+
+    def raise_for_status(self):
+        pass
+
+
+def create_mock_get_response(mock_get, dummy_response):
+    mocked_response = MockResponse(dummy_response)
+    mock_get.return_value = mocked_response
 
 class TestGetAccessToken(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.patcher = patch('aiohttp.ClientSession.post')
+        cls.patcher = patch('httpx.AsyncClient.post')
         cls.mock_post = cls.patcher.start()
         cls.create_mock_access_token_post_response(cls)
 
     def create_mock_access_token_post_response(self):
         dummy_access_token = {'access_token':'DummyAccessToken'}
-        self.mock_post.return_value.__aenter__.return_value.json = AsyncMock(return_value=dummy_access_token)
+        self.mock_post.return_value = MockResponse(dummy_access_token)
 
     @classmethod
     def tearDownClass(cls):
@@ -104,30 +114,30 @@ class TestGetDataIsSuccessful(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(expected_namespace, actual_namespace)
 
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_make_get_request_when_url_has_namespace(self, mock_get):
         dummy_url = 'www.dummy.com/?namespace=test'
         dummy_response = {'test': 'response'}
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
 
         actual_respnose = await self.TestApi._make_get_request(dummy_url)
 
         self.assertEqual(dummy_response, actual_respnose)
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_make_get_request_when_url_has_no_namespace(self, mock_get):
         dummy_url = 'www.{region}.dummy.com/'
         dummy_response = {'test': 'response'}
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
 
         actual_response = await self.TestApi._make_get_request(dummy_url)
         
         self.assertEqual(dummy_response, actual_response)
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_get_data_works_with_url_name(self, mock_get):
         dummy_response = {"key": 1}
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
 
         resp = await self.TestApi._get_data("connected_realm_index")
 
@@ -136,10 +146,10 @@ class TestGetDataIsSuccessful(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(expected_response, actual_response)
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_get_data_works_with_already_formatted_url(self, mock_get):
         dummy_response = {"key": 1}
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
 
         resp = await self.TestApi._get_data("www.dummy.com/?access_token=123")
 
@@ -175,31 +185,31 @@ class TestGetDataIsSuccessful(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(expected_url, actual_url)
 
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_search_data_with_realms(self, mock_get):        
         dummy_response = {"key": 1}
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
 
         response = await self.TestApi._search_data("search_realm")
 
         self.assertEqual(response["key"], dummy_response["key"])
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_search_data_with_items(self, mock_get):
         dummy_response = {"results": [{"key": {"href": "https://dummyurl.com/"}}]}
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
 
         response = await self.TestApi._search_data("search_item", {"id": "1"})
         expected_resp = {"results": [{"key": {"href": "https://dummyurl.com/"}}]}
 
         self.assertEqual(response, expected_resp)
 
-    @patch('aiohttp.ClientSession.get')
+    @patch('httpx.AsyncClient.get')
     async def test_make_search_request(self, mock_get):
         dummy_url = "https://dummyurl.com/"
         dummy_response = 'success'
 
-        create_mock_get_response(self, mock_get, dummy_response)
+        create_mock_get_response(mock_get, dummy_response)
         actual_response = await self.TestApi._make_get_request(dummy_url)
 
         self.assertEqual(dummy_response, actual_response)
@@ -289,7 +299,7 @@ class TestGetDataIsSuccessful(unittest.IsolatedAsyncioTestCase):
                 'results': []
             }
         ]
-        dummy_get_detailed_list_of_elements = [{'data': {'id':1}}]
+        dummy_get_detailed_list_of_elements = [{'id':1}]
 
         mocked_search_data.side_effect = dummy_search_data_response
         _get_detailed_list_of_elements.return_value = dummy_get_detailed_list_of_elements

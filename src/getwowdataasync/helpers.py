@@ -4,7 +4,7 @@ import datetime
 import functools
 import asyncio
 
-import aiohttp
+import httpx
 # Importing WowApi into this file caueses a circulat import error when running tests
 
 
@@ -72,21 +72,14 @@ def retry(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         retries = 0
-        while retries < 10:
+        while retries < 20:
+            await asyncio.sleep(1/10)
             try:
                 json = await func(*args, **kwargs)
-                await asyncio.sleep(1)
                 return json
-            except aiohttp.ClientConnectionError as e:
+            except httpx.HTTPStatusError as e:
                 print(f"{func.__name__} {e}")
                 retries += 1
-            except aiohttp.ClientResponseError as e:
-                print(f"{func.__name__} {e}")
-                retries += 1
-            except aiohttp.ClientPayloadError as e:
-                print(f"{func.__name__} {e}")
-                retries += 1
-
     return wrapper
 
 # This is probally useless but i don't want to delete it completely

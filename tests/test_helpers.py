@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import AsyncMock
 
-import aiohttp
-
 from getwowdataasync.helpers import *
 
 class TestHelpers(unittest.IsolatedAsyncioTestCase):

@@ -17,7 +17,7 @@ class WowApi:
     # couldn't get __init__ to work with async
     @classmethod
     async def create(cls, region: str, locale: str = "en_US", wow_api_id: str = None, wow_api_secret: str = None):
-        """Gets an instance of WowApi with an access token, region, and aiohttp session.
+        """Gets an instance of WowApi with an access token, region, and httpx client.
 
         Args:
             region (str): Each region has its own data. This specifies which regions data
@@ -31,8 +31,10 @@ class WowApi:
             An instance of the WowApi class.
         """
         self = WowApi()
+
         self.region = region
         self.locale = locale
+        self.client = httpx.AsyncClient(timeout=30)
         self.access_token = await self._get_access_token(wow_api_id=wow_api_id, wow_api_secret=wow_api_secret)
         return self
 
@@ -46,10 +48,10 @@ class WowApi:
         secret = wow_api_secret or os.environ["wow_api_secret"]
         formatted_access_token_url = access_token_url.format(region=self.region)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(formatted_access_token_url, auth=(id, secret), data=token_data)
-            response = response.json()
-            return response["access_token"]
+        response = await self.client.post(formatted_access_token_url, auth=(id, secret), data=token_data)
+        response.raise_for_status()            
+        response = response.json()
+        return response["access_token"]
 
     # TODO make a url class with format, ... methods
     @retry
@@ -94,9 +96,9 @@ class WowApi:
     async def _make_get_request(self, url: str, path_ids: dict = {}, params: dict = {}):
         formatted_url = self._format_url(url, path_ids)
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(formatted_url, params=params)
-            return response.json()
+        response = await self.client.get(formatted_url, params=params)
+        response.raise_for_status()            
+        return response.json()
 
     @retry
     async def _search_data(self, url_name: str, search_parameters: dict = {}) -> dict:
@@ -114,9 +116,9 @@ class WowApi:
         return json_response
 
     async def _make_search_request(self, url: str, search_parameters: dict = {}):
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=search_parameters)
-            return response.json()
+        response = await self.client.get(url, params=search_parameters)
+        response.raise_for_status()            
+        return response.json()
 
     async def get_all_items(self) -> list:
         """Adds all urls from an item or realm search to the queue.
@@ -130,7 +132,7 @@ class WowApi:
         print("Starting search...")
         set_of_items = await self._search_data(url_name, params_to_start_search_from_id_0)
         while set_of_items['results']:
-            items += await self._get_detailed_list_of_elements(items, set_of_items)
+            items += await self._get_detailed_list_of_elements(set_of_items)
             print('finshed 1000 items! continuing...')
             next_id_in_sequence = items[-1]['id'] + 1  # +1 so that the last item search returns empty
             prams_to_search_next_set_of_ids = {"orderby": "id", "id": f"[{next_id_in_sequence},]", "_pageSize": 1000}
@@ -141,35 +143,6 @@ class WowApi:
         print("Finished getting all items!")
         return items
 
-    # A search returns data on the items but is missing some
-    # important details. This Makes a request to each individual
-    # item to get all its information
-    async def _get_detailed_list_of_elements(self, collection: list, json: str):
-        temp_collection = []
-        for item in json["results"]:
-            await asyncio.sleep(1/10) # need to throttle to prevent 429
-
-            item_id = item["data"]["id"]
-            item_response = await self.get_item_by_id(item_id)
-            temp_collection.append(item_response)
-            print(len(temp_collection))
-        return temp_collection
-
-    async def get_item_by_id(self, item_id: int):
-        url_name = "item"
-        path_ids = {"item_id": item_id}
-        return await self._get_data(url_name, path_ids)
-
-    async def get_all_realms(self) -> list:
-        """Returns all realms in WowApi's given region."""
-        connected_realms_index = await self.get_connected_realm_index()
-        realms = []
-
-        for realm in connected_realms_index['connected_realms']:
-            realm = await self._get_data(realm['href'])
-            realms.append(realm)
-        
-        return realms
 
     async def get_items_by_expansion(self, expansion_name: str) -> list:
         """Gets all items from an expansion.
@@ -198,13 +171,75 @@ class WowApi:
 
         set_of_items = await self._search_data(url_name, starting_params)
         while set_of_items['results'] and start_id < end_id:
-            items += await self._get_detailed_list_of_elements(items, set_of_items)
-            start_id = items[-1]['data']['id'] + 1  # +1 so that the last item search returns empty
+            items += await self._get_detailed_list_of_elements(set_of_items)
+            start_id = items[-1]['id'] + 1  # +1 so that the last item search returns empty
             prams_to_search_next_set_of_ids = {"orderby": "id", "id": f"[{start_id},]", "_pageSize": 1000}
 
-            set_of_items = await self._search_data('items', prams_to_search_next_set_of_ids)
+            set_of_items = await self._search_data(url_name, prams_to_search_next_set_of_ids)
         
         return items
+
+    # A search returns data on the items but is missing some
+    # important details. This Makes a request to each individual
+    # item to get all its information
+    async def _get_detailed_list_of_elements(self, json: dict):
+        temp_collection = []
+        for item in json["results"]:
+            await asyncio.sleep(1/10) # need to throttle to prevent 429
+
+            item_id = item["data"]["id"]
+            task = asyncio.create_task(self.get_item_by_id(item_id))
+            temp_collection.append(task)
+            print(f"{len(temp_collection)} items requested")
+        return list(await asyncio.gather(*temp_collection))
+
+    # async def _get_item(self, item_id: int) -> None:
+    #     items = []
+
+    #     # start timing 100 task execution
+    #     start = time.perf_counter()
+    #     while len(tasks) < 100:
+    #         if self.queue.empty():
+    #             break
+    #         url = self.queue.get_nowait()
+    #         task = asyncio.create_task(self._get_item(url))
+    #         tasks.append(task)
+    #         request_count += 1
+    #         await asyncio.sleep(1 / 10)
+    #     finished_tasks = await asyncio.gather(*tasks)
+    #     for ele in finished_tasks:
+    #         if ele == None:
+    #             finished_tasks.remove(None)
+    #     end = time.perf_counter()
+    #     elapsed = end - start
+    #     print(f"100 tasks finished in: {elapsed}")
+    #     last_id = finished_tasks[-1]["id"]
+    #     print(f"last id: {last_id}")
+    #     if url_name == "search_item":
+    #         item_json["items"] += finished_tasks
+    #     elif url_name == "search_realm":
+    #         realm_json["realms"] += finished_tasks
+
+    #     tasks = []
+
+    # if url_name == "search_item":
+    #     return item_json
+
+    async def get_item_by_id(self, item_id: int):
+        url_name = "item"
+        path_ids = {"item_id": item_id}
+        return await self._get_data(url_name, path_ids)
+
+    async def get_all_realms(self) -> list:
+        """Returns all realms in WowApi's given region."""
+        connected_realms_index = await self.get_connected_realm_index()
+        realms = []
+
+        for realm in connected_realms_index['connected_realms']:
+            realm = await self._get_data(realm['href'])
+            realms.append(realm)
+        
+        return realms
 
     async def get_professions_tree_by_expansion(self, expansion_name: str) -> list:
         """Returns all professions and recipes from a provided expaneion.
@@ -266,7 +301,7 @@ class WowApi:
         return realm_json
 
     async def item_search(self, filters: dict) -> dict:
-        """Preforms a search of all items.
+        """Preforms a search across all items.
 
         Args:
             extra_params (dict): Parameters for refining a search request.
@@ -277,6 +312,7 @@ class WowApi:
         """
         url_name = "search_item"
         items_json = await self._search_data(url_name, filters)
+
         return items_json
 
     async def get_connected_realms_by_id(self, connected_realm_id: int) -> dict:
@@ -434,10 +470,7 @@ class WowApi:
 
     async def close(self):
         """Closes aiohttp.ClientSession."""
-        pass
-        # await self.session.close()
-        # await asyncio.sleep(0.1)
-
+        await self.client.aclose()
 
      # TODO remove if unused (most likely)
     # async def search_worker(self, url_name: str):

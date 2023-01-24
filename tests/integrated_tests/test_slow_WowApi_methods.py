@@ -12,9 +12,7 @@ class TestSlowMethods(unittest.IsolatedAsyncioTestCase):
         self.TestApi = await WowApi.create("us")
 
     async def asyncTearDown(self):
-        await asyncio.sleep(0) # prevents an annoying warning
         await self.TestApi.close()
-        await asyncio.sleep(1/10) # prevents an annoying warning
 
     # Takes too  long for regular testing
     async def test_get_all_items(self):
@@ -24,7 +22,7 @@ class TestSlowMethods(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_all_realms(self):
         actual_output = await self.TestApi.get_all_realms()
-        
+
         self.assertTrue(actual_output)
         
     async def test_get_items_by_expansion(self):

@@ -60,6 +60,9 @@ class TestFasterMethods(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(expected_id, actual_id)
         
+    async def test_item_search_with_(self):
+        starting_filters = {"id": "[0, 50]", "orderby": "id", "_pageSize": 1}
+
 
     async def test_get_connected_realms_by_id(self):
         actual_response = await self.TestApi.get_connected_realms_by_id(4)
